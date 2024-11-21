@@ -136,6 +136,16 @@ def load_model(model_filename):
     with open(model_filename, "rb") as infile:
         return pickle.load(infile)
 
+def get_percentage_accuracy(predicted, actual):
+    diff = abs(actual - predicted)
+    max_val = max(actual, predicted)
+    return (1 - diff / max_val) * 100
+
+
+class PercentageAccuracyLoss(torch.nn.Module):
+    def forward(self, predicted, actual):
+        return 100 - get_percentage_accuracy(predicted, actual)
+
 
 # This is just an helper for walking through the validation dataset one line at a time
 # and using the methods above to calculate an overall average percentage accuracy
@@ -157,9 +167,7 @@ def test_one_by_one(model_filename):
         actual = round(data["time"], 2)
         total_job_time += data["time"]
 
-        diff = abs(actual - predicted)
-        max_val = max(actual, predicted)
-        percentage_accuracy = (1 - diff / max_val) * 100
+        percentage_accuracy = get_percentage_accuracy(predicted, actual)
 
         perc.append(percentage_accuracy)
         # Print the data if very inaccurate prediction
@@ -311,7 +319,8 @@ if ENABLE_TRAINING:
         validate_loader = DataLoader(validate_dataset, batch_size=64, shuffle=True)
 
         # Loss function
-        criterion = nn.MSELoss()
+        # criterion = nn.HuberLoss()
+        criterion = PercentageAccuracyLoss()
 
         num_epochs = trial.suggest_int("num_epochs", MIN_NUMBER_OF_EPOCHS, MAX_NUMBER_OF_EPOCHS)
         total_loss = None
@@ -368,7 +377,7 @@ if __name__ == "__main__":
         load_if_exists=True,
         sampler=OPTUNA_SAMPLER,
     )
-    study.optimize(objective, n_trials=NUMBER_OF_STUDY_TRIALS)
+    study.optimize(objective, n_trials=NUMBER_OF_STUDY_TRIALS, n_jobs=4, show_progress_bar=True)
 
     # Print the best hyperparameters
     print("Best trial:")
